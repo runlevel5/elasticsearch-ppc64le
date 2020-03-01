@@ -1,0 +1,206 @@
+From 0f5d904b9109abaaf519ce48e34ea6a69cd6b1c2 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Trung=20L=C3=AA?= <trung.le@ruby-journal.com>
+Date: Sat, 29 Feb 2020 22:43:01 +1100
+Subject: [PATCH] Support ppc64le
+
+---
+ .../elasticsearch/gradle/DistributionDownloadPlugin.java    | 4 ++--
+ distribution/archives/build.gradle                          | 6 ++++--
+ distribution/bwc/build.gradle                               | 4 ++--
+ distribution/docker/build.gradle                            | 4 +++-
+ distribution/packages/build.gradle                          | 6 +++++-
+ distribution/src/config/elasticsearch.yml                   | 1 +
+ distribution/src/config/jvm.options                         | 1 -
+ qa/os/bats/utils/packages.bash                              | 4 ++--
+ .../java/org/elasticsearch/bootstrap/SystemCallFilter.java  | 1 +
+ .../test/java/org/elasticsearch/plugins/PluginsTests.java   | 1 +
+ settings.gradle                                             | 6 +++---
+ 11 files changed, 24 insertions(+), 14 deletions(-)
+
+diff --git a/buildSrc/src/main/java/org/elasticsearch/gradle/DistributionDownloadPlugin.java b/buildSrc/src/main/java/org/elasticsearch/gradle/DistributionDownloadPlugin.java
+index d8c693b77d2..0ce065832eb 100644
+--- a/buildSrc/src/main/java/org/elasticsearch/gradle/DistributionDownloadPlugin.java
++++ b/buildSrc/src/main/java/org/elasticsearch/gradle/DistributionDownloadPlugin.java
+@@ -202,14 +202,14 @@ public class DistributionDownloadPlugin implements Plugin<Project> {
+         }
+ 
+         String extension = distribution.getType().toString();
+-        String classifier = "x86_64";
++        String classifier = "ppc64le";
+         if (distribution.getVersion().before("7.0.0")) {
+             classifier = null; // no platform specific distros before 7.0
+         } else if (distribution.getType() == Type.ARCHIVE) {
+             extension = distribution.getPlatform() == Platform.WINDOWS ? "zip" : "tar.gz";
+             classifier = distribution.getPlatform() + "-" + classifier;
+         } else if (distribution.getType() == Type.DEB) {
+-            classifier = "amd64";
++            classifier = "ppc64le";
+         }
+         return FAKE_IVY_GROUP + ":elasticsearch" + (distribution.getFlavor() == Flavor.OSS ? "-oss:" : ":")
+             + distribution.getVersion() + (classifier == null ? "" : ":" + classifier) + "@" + extension;
+diff --git a/distribution/archives/build.gradle b/distribution/archives/build.gradle
+index f3905eae4b7..86e0dc642ba 100644
+--- a/distribution/archives/build.gradle
++++ b/distribution/archives/build.gradle
+@@ -28,6 +28,8 @@ import org.elasticsearch.gradle.tar.SymbolicLinkPreservingTar
+ 
+ import java.nio.file.Files
+ import java.nio.file.Path
++// Detecting the architecture
++ String arch = System.getProperty('os.arch', '');
+ 
+ // need this so Zip/Tar tasks get basic defaults...
+ apply plugin: 'base'
+@@ -168,13 +170,13 @@ task buildOssNoJdkDarwinTar(type: SymbolicLinkPreservingTar) {
+ 
+ task buildLinuxTar(type: SymbolicLinkPreservingTar) {
+   configure(commonTarConfig)
+-  archiveClassifier = 'linux-x86_64'
++  archiveClassifier = 'linux-'+ arch
+   with archiveFiles(modulesFiles(false, 'linux'), 'tar', 'linux', false, true)
+ }
+ 
+ task buildOssLinuxTar(type: SymbolicLinkPreservingTar) {
+   configure(commonTarConfig)
+-  archiveClassifier = 'linux-x86_64'
++  archiveClassifier = 'linux-'+ arch
+   with archiveFiles(modulesFiles(true, 'linux'), 'tar', 'linux', true, true)
+ }
+ 
+diff --git a/distribution/bwc/build.gradle b/distribution/bwc/build.gradle
+index aa35598c9cd..57e0d8af230 100644
+--- a/distribution/bwc/build.gradle
++++ b/distribution/bwc/build.gradle
+@@ -254,10 +254,10 @@ bwcVersions.forPreviousUnreleased { BwcVersions.UnreleasedVersionInfo unreleased
+           }
+         }
+         if (bwcVersion.onOrAfter('7.0.0') && projectName.contains('deb')) {
+-          classifier = "-amd64"
++          classifier = "-ppc64le"
+         }
+         if (bwcVersion.onOrAfter('7.0.0') && projectName.contains('rpm')) {
+-          classifier = "-x86_64"
++          classifier = "-ppc64le"
+         }
+         if (bwcVersion.onOrAfter('6.3.0')) {
+             baseDir += projectName.endsWith('zip') || projectName.endsWith('tar') ? '/archives' : '/packages'
+diff --git a/distribution/docker/build.gradle b/distribution/docker/build.gradle
+index 7bf973e7edc..9540ff1e71d 100644
+--- a/distribution/docker/build.gradle
++++ b/distribution/docker/build.gradle
+@@ -5,6 +5,8 @@ import org.elasticsearch.gradle.testfixtures.TestFixturesPlugin
+ 
+ apply plugin: 'elasticsearch.standalone-rest-test'
+ apply plugin: 'elasticsearch.test.fixtures'
++// Detecting the architecture
++String arch = System.getProperty('os.arch', '');
+ 
+ configurations {
+   dockerPlugins
+@@ -20,7 +22,7 @@ dependencies {
+ }
+ 
+ ext.expansions = { oss, local ->
+-  final String classifier = 'linux-x86_64'            
++  final String classifier = 'linux-' + arch
+   final String elasticsearch = oss ? "elasticsearch-oss-${VersionProperties.elasticsearch}-${classifier}.tar.gz" : "elasticsearch-${VersionProperties.elasticsearch}-${classifier}.tar.gz"
+   return [
+     'build_date'          : project.ext.buildDate,
+diff --git a/distribution/packages/build.gradle b/distribution/packages/build.gradle
+index a1ab72890a4..e0c71272616 100644
+--- a/distribution/packages/build.gradle
++++ b/distribution/packages/build.gradle
+@@ -107,7 +107,7 @@ Closure commonPackageConfig(String type, boolean oss, boolean jdk) {
+   return {
+     dependsOn "process${oss ? 'Oss' : ''}${jdk ? '' : 'NoJdk'}${type.capitalize()}Files"
+     packageName "elasticsearch${oss ? '-oss' : ''}"
+-    arch (type == 'deb' ? 'amd64' : 'X86_64')
++    arch ("ppc64le")
+     // Follow elasticsearch's file naming convention
+     String jdkString = jdk ? "" : "no-jdk-"
+     archiveName "${packageName}-${project.version}-${jdkString}${archString}.${type}"
+@@ -572,3 +572,7 @@ subprojects {
+     }
+   }
+ }
++buildDeb.enabled=false
++buildOssDeb.enabled=false
++buildRpm.enabled=false
++buildOssRpm.enabled=false
+diff --git a/distribution/src/config/elasticsearch.yml b/distribution/src/config/elasticsearch.yml
+index a87d7f70825..78dbfb8add2 100644
+--- a/distribution/src/config/elasticsearch.yml
++++ b/distribution/src/config/elasticsearch.yml
+@@ -86,3 +86,4 @@ ${path.logs}
+ # Require explicit names when deleting indices:
+ #
+ #action.destructive_requires_name: true
++network.host: localhost
+diff --git a/distribution/src/config/jvm.options b/distribution/src/config/jvm.options
+index 075106100ea..e17737d6122 100644
+--- a/distribution/src/config/jvm.options
++++ b/distribution/src/config/jvm.options
+@@ -118,4 +118,3 @@ ${error.file}
+ 9-:-Xlog:gc*,gc+age=trace,safepoint:file=${loggc}:utctime,pid,tags:filecount=32,filesize=64m
+ # due to internationalization enhancements in JDK 9 Elasticsearch need to set the provider to COMPAT otherwise
+ # time/date parsing will break in an incompatible way for some date patterns and locals
+-9-:-Djava.locale.providers=COMPAT
+diff --git a/qa/os/bats/utils/packages.bash b/qa/os/bats/utils/packages.bash
+index f0c6c963fed..b3342109a26 100644
+--- a/qa/os/bats/utils/packages.bash
++++ b/qa/os/bats/utils/packages.bash
+@@ -80,8 +80,8 @@ install_package() {
+                 ;;
+         esac
+     done
+-    local rpm_classifier="-x86_64"
+-    local deb_classifier="-amd64"
++    local rpm_classifier="-ppc64le"
++    local deb_classifier="-ppc64le"
+     if [[ $version == 6* ]]; then
+       rpm_classifier=""
+       deb_classifier=""
+diff --git a/server/src/main/java/org/elasticsearch/bootstrap/SystemCallFilter.java b/server/src/main/java/org/elasticsearch/bootstrap/SystemCallFilter.java
+index 59f8bd5daf7..5b9849d2288 100644
+--- a/server/src/main/java/org/elasticsearch/bootstrap/SystemCallFilter.java
++++ b/server/src/main/java/org/elasticsearch/bootstrap/SystemCallFilter.java
+@@ -243,6 +243,7 @@ final class SystemCallFilter {
+         Map<String,Arch> m = new HashMap<>();
+         m.put("amd64", new Arch(0xC000003E, 0x3FFFFFFF, 57, 58, 59, 322, 317));
+         m.put("aarch64",  new Arch(0xC00000B7, 0xFFFFFFFF, 1079, 1071, 221, 281, 277));
++        m.put("ppc64le", new Arch(0xC0000015, 0xFFFFFFFF, 2, 189, 11, 362, 358));
+         ARCHITECTURES = Collections.unmodifiableMap(m);
+     }
+ 
+diff --git a/server/src/test/java/org/elasticsearch/plugins/PluginsTests.java b/server/src/test/java/org/elasticsearch/plugins/PluginsTests.java
+index a26bcb1991e..2b36bef7c30 100644
+--- a/server/src/test/java/org/elasticsearch/plugins/PluginsTests.java
++++ b/server/src/test/java/org/elasticsearch/plugins/PluginsTests.java
+@@ -38,6 +38,7 @@ public class PluginsTests extends ESTestCase {
+ 
+     public void testMakeSpecificPlatformNames() {
+         assertEquals("darwin-x86_64", Platforms.platformName("Mac OS X", "x86_64"));
++        assertEquals("linux-ppc64le", Platforms.platformName("Linux", "ppc64le"));
+         assertEquals("linux-x86_64", Platforms.platformName("Linux", "amd64"));
+         assertEquals("linux-x86", Platforms.platformName("Linux", "i386"));
+         assertEquals("windows-x86_64", Platforms.platformName("Windows Server 2008 R2", "amd64"));
+diff --git a/settings.gradle b/settings.gradle
+index 42746c14f0b..ce0488e1d33 100644
+--- a/settings.gradle
++++ b/settings.gradle
+@@ -27,9 +27,9 @@ List projects = [
+   'distribution:archives:linux-tar',
+   'distribution:archives:oss-no-jdk-linux-tar',
+   'distribution:archives:no-jdk-linux-tar',
+-  'distribution:docker',
+-  'distribution:docker:oss-docker-build-context',
+-  'distribution:docker:docker-build-context',
++  // 'distribution:docker',
++  // 'distribution:docker:oss-docker-build-context',
++  // 'distribution:docker:docker-build-context',
+   'distribution:packages:oss-deb',
+   'distribution:packages:deb',
+   'distribution:packages:oss-no-jdk-deb',
+-- 
+2.24.1
+
