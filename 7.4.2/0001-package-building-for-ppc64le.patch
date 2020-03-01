@@ -1,5 +1,5 @@
 From 0f5d904b9109abaaf519ce48e34ea6a69cd6b1c2 Mon Sep 17 00:00:00 2001
-From: =?UTF-8?q?Trung=20L=C3=AA?= <trung.le@ruby-journal.com>
+From: Trung LE <trung.le@ruby-journal.com>
 Date: Sat, 29 Feb 2020 22:43:01 +1100
 Subject: [PATCH] Support ppc64le
 
