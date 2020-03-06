@@ -17,5 +17,6 @@ groupadd elasticsearch && useradd elasticsearch -g elasticsearch && \
 chown -R elasticsearch:elasticsearch /usr/share/elasticsearch && \
 rm /tmp/elasticsearch-oss-7.4.2-SNAPSHOT-no-jdk-linux-x86_64.tar.gz
 
+EXPOSE 9200
 USER elasticsearch
 ENTRYPOINT ["/usr/share/elasticsearch/bin/elasticsearch"]
