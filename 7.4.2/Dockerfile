@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y patch && \
 
 FROM adoptopenjdk/openjdk12:debian-jre
 COPY --from=builder /opt/elasticsearch-oss-7.4.2-SNAPSHOT-no-jdk-linux-x86_64.tar.gz /tmp
+COPY elasticsearch-7.4.2.tar.gz /tmp
 RUN tar -C /usr/share/ -xf /tmp/elasticsearch-oss-7.4.2-SNAPSHOT-no-jdk-linux-x86_64.tar.gz && \
 mv /usr/share/elasticsearch-7.4.2-SNAPSHOT /usr/share/elasticsearch && \
 cd /usr/share/elasticsearch/lib && curl -O -L https://repo1.maven.org/maven2/net/java/dev/jna/jna/4.5.1/jna-4.5.1.jar && \
@@ -18,5 +19,5 @@ chown -R elasticsearch:elasticsearch /usr/share/elasticsearch && \
 rm /tmp/elasticsearch-oss-7.4.2-SNAPSHOT-no-jdk-linux-x86_64.tar.gz
 
 EXPOSE 9200
-USER elasticsearch
-ENTRYPOINT ["/usr/share/elasticsearch/bin/elasticsearch"]
+ENTRYPOINT ["/bin/sh", "entrypoint.sh"]
+CMD ["/usr/share/elasticsearch/bin/elasticsearch"]
